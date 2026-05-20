@@ -14,7 +14,7 @@ import { FestivalBanner } from "@/components/shared/festival-banner";
 import { WhatsAppBubble } from "@/components/shared/whatsapp-bubble";
 import { SocialProofToast } from "@/components/shared/social-proof-toast";
 import { GalleryLightbox } from "@/components/gallery/gallery-lightbox";
-import { SITE } from "@/lib/site";
+import { SITE, SITE_URL } from "@/lib/site";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     template: `%s · ${SITE.name}`,
   },
   description: SITE.description,
-  metadataBase: new URL("https://pankti.local"),
+  metadataBase: new URL(SITE_URL),
   applicationName: SITE.name,
   keywords: [
     "catering Hyderabad",

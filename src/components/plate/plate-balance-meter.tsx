@@ -23,48 +23,47 @@ export function PlateBalanceMeter({
   const score = Math.round((hits / ESSENTIAL_COURSES.length) * 100);
 
   return (
-    <div className="px-5 py-2.5 border-b border-[var(--border)]">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[10px] uppercase tracking-wider text-fg-subtle">
-          Balance · {score}%
+    <div className="px-4 py-1.5 border-b border-[var(--border)]">
+      <div className="flex items-center gap-2">
+        <span className="text-[9px] uppercase tracking-wider text-fg-subtle shrink-0 tabular-nums">
+          {score}%
         </span>
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="h-1 flex-1 rounded-full bg-[var(--bg)] overflow-hidden">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all duration-500",
+              score >= 80
+                ? "bg-[var(--success)]"
+                : score >= 50
+                  ? "bg-primary"
+                  : "bg-[var(--danger)]/80",
+            )}
+            style={{ width: `${score}%` }}
+          />
+        </div>
+        <div className="flex items-center gap-0.5 shrink-0">
           {ESSENTIAL_COURSES.map((c) => {
             const has = present.has(c.id);
             return (
               <span
                 key={c.id}
-                title={c.label}
+                title={`${c.label}${has ? "" : " — missing"}`}
                 className={cn(
-                  "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-medium",
+                  "inline-flex h-3.5 w-3.5 items-center justify-center rounded-full",
                   has
-                    ? "bg-[var(--success)]/15 text-[var(--success)]"
+                    ? "bg-[var(--success)]/20 text-[var(--success)]"
                     : "bg-[var(--border)] text-fg-subtle",
                 )}
               >
                 {has ? (
-                  <Check className="h-2.5 w-2.5" />
+                  <Check className="h-2 w-2" />
                 ) : (
-                  <X className="h-2.5 w-2.5" />
+                  <X className="h-2 w-2" />
                 )}
-                {c.label}
               </span>
             );
           })}
         </div>
-      </div>
-      <div className="h-1 rounded-full bg-[var(--bg)] overflow-hidden">
-        <div
-          className={cn(
-            "h-full rounded-full transition-all duration-500",
-            score >= 80
-              ? "bg-[var(--success)]"
-              : score >= 50
-                ? "bg-primary"
-                : "bg-[var(--danger)]/80",
-          )}
-          style={{ width: `${score}%` }}
-        />
       </div>
     </div>
   );

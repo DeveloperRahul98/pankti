@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { SITE_URL } from "@/lib/site";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -8,7 +9,6 @@ export default function robots(): MetadataRoute.Robots {
         allow: "/",
       },
     ],
-    // Update to your real production URL when deployed.
-    sitemap: "https://pankti.local/sitemap.xml",
+    sitemap: `${SITE_URL}/sitemap.xml`,
   };
 }

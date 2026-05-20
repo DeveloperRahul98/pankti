@@ -12,4 +12,4 @@ All three are written so someone with no technical background can read them top 
 
 ## Where things live in the codebase
 
-For a quick map of the project structure, see the [Project structure](./TECH-STACK.md#7-project-structure) section of the tech stack doc.
+For a quick map of the project structure, see the [Project structure](./TECH-STACK.md#8-project-structure) section of the tech stack doc.

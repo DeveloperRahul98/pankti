@@ -1,13 +1,17 @@
 import Link from "next/link";
 import { Logo } from "@/components/shared/logo";
-import { SITE, NAV_LINKS } from "@/lib/site";
+import { SITE, NAV_LINKS, COMPLIANCE } from "@/lib/site";
 import { Phone, Mail, MapPin, AtSign, MessageCircle } from "lucide-react";
+import { ComplianceStrip } from "@/components/shared/compliance-strip";
 
 export function Footer() {
   return (
     <footer className="relative mt-24 border-t border-[var(--border)] bg-[var(--bg-elev)]">
       <div className="absolute inset-x-0 top-0 divider-saffron" />
       <div className="mx-auto max-w-7xl px-5 py-14 lg:px-8">
+        {/* Compliance & trust strip — surfaces FSSAI, GSTIN, certs first */}
+        <ComplianceStrip />
+
         <div className="grid gap-12 md:grid-cols-4">
           <div className="md:col-span-2">
             <Logo />
@@ -81,9 +85,15 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-[var(--border)] pt-6 text-xs text-fg-subtle">
-          <p>© {new Date().getFullYear()} Pankti Catering. Crafted with care.</p>
-          <p>{SITE.hours}</p>
+        <div className="mt-12 flex flex-col gap-2 border-t border-[var(--border)] pt-6 text-xs text-fg-subtle">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <p>© {new Date().getFullYear()} Pankti Catering. Crafted with care.</p>
+            <p>{SITE.hours}</p>
+          </div>
+          <p className="text-[10px] tabular-nums">
+            FSSAI No. <span className="text-fg-muted">{COMPLIANCE.fssaiNumber}</span>{" "}
+            · GSTIN <span className="text-fg-muted">{COMPLIANCE.gstin}</span>
+          </p>
         </div>
       </div>
     </footer>

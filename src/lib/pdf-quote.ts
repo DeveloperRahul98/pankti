@@ -4,6 +4,18 @@ import type { PlateLine } from "@/lib/plate-store";
 import { MENU } from "@/data/menu";
 import { SITE } from "@/lib/site";
 import { formatINRPlain } from "@/lib/utils";
+import { encodePlate } from "@/lib/plate-encode";
+import { qrDataUrl } from "@/lib/qr";
+import {
+  rentalLines,
+  computePlateTotals,
+  computeDietarySummary,
+  formatDietarySummary,
+  EMPTY_RENTALS,
+  GST_RATE,
+  EXIT_DISCOUNT_RATE,
+  type Rentals,
+} from "@/lib/plate-store";
 
 export type QuoteMeta = {
   name?: string;
@@ -11,6 +23,8 @@ export type QuoteMeta = {
   eventDate?: string;
   occasion?: string;
   guests: number;
+  rentals?: Rentals;
+  discountApplied?: boolean;
 };
 
 // Cache the font bytes once per page-load so we don't re-fetch on every PDF.
@@ -41,6 +55,9 @@ async function loadRupeeFont(doc: jsPDF) {
 export async function generateQuotePdf(lines: PlateLine[], meta: QuoteMeta) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   await loadRupeeFont(doc);
+
+  const shareUrl = `${window.location.origin}/plate/${encodePlate(lines, meta.guests)}`;
+  const qrPng = await qrDataUrl(shareUrl, 256);
 
   const w = doc.internal.pageSize.getWidth();
   const margin = 48;
@@ -116,6 +133,20 @@ export async function generateQuotePdf(lines: PlateLine[], meta: QuoteMeta) {
   });
   y += Math.ceil(metaPairs.length / 2) * 18 + 18;
 
+  // Dietary summary line — auto-computed menu mix for the caterer
+  const dietaryText = formatDietarySummary(computeDietarySummary(lines));
+  if (dietaryText) {
+    doc.setFont("Roboto", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(201, 132, 35);
+    doc.text("MENU MIX", margin, y);
+    doc.setFont("Roboto", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(60, 60, 60);
+    doc.text(dietaryText, margin + 70, y);
+    y += 18;
+  }
+
   doc.setDrawColor(220, 220, 220);
   doc.line(margin, y, w - margin, y);
   y += 22;
@@ -163,6 +194,17 @@ export async function generateQuotePdf(lines: PlateLine[], meta: QuoteMeta) {
     y += 28;
   }
 
+  // Compute the full pricing model from the single source of truth so the
+  // PDF mirrors what the customer sees on screen.
+  const totals = computePlateTotals(
+    lines,
+    meta.guests,
+    meta.rentals ?? EMPTY_RENTALS,
+    !!meta.discountApplied,
+  );
+  const rentalsForLines = meta.rentals ?? EMPTY_RENTALS;
+  const extras = rentalLines(rentalsForLines, meta.guests);
+
   // Totals
   y += 6;
   doc.setDrawColor(220, 220, 220);
@@ -174,16 +216,102 @@ export async function generateQuotePdf(lines: PlateLine[], meta: QuoteMeta) {
   doc.text("Per plate", margin, y);
   doc.setFont("Roboto", "bold");
   doc.setTextColor(14, 14, 15);
-  doc.text(formatINRPlain(perPlate), w - margin, y, { align: "right" });
+  doc.text(formatINRPlain(totals.perPlate), w - margin, y, { align: "right" });
   y += 18;
   doc.setFont("Roboto", "normal");
   doc.setTextColor(80, 80, 80);
-  doc.text(`Guests × ${meta.guests}`, margin, y);
+  doc.text(`Food · ${meta.guests} guests`, margin, y);
   doc.setFont("Roboto", "bold");
   doc.setTextColor(14, 14, 15);
-  doc.text(formatINRPlain(perPlate * meta.guests), w - margin, y, {
-    align: "right",
-  });
+  doc.text(formatINRPlain(totals.foodTotal), w - margin, y, { align: "right" });
+  y += 18;
+
+  // Extras & rentals breakdown
+  if (extras.length > 0) {
+    y += 6;
+    doc.setFont("Roboto", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(110, 110, 110);
+    doc.text("EXTRAS & RENTALS", margin, y);
+    y += 14;
+    doc.setFont("Roboto", "normal");
+    doc.setFontSize(10);
+    for (const line of extras) {
+      if (y > 740) {
+        doc.addPage();
+        y = 64;
+      }
+      doc.setTextColor(60, 60, 60);
+      doc.text(line.label, margin, y);
+      if (line.note) {
+        doc.setTextColor(150, 150, 150);
+        doc.setFontSize(8);
+        doc.text(line.note, margin, y + 11);
+        doc.setFontSize(10);
+      }
+      doc.setTextColor(14, 14, 15);
+      doc.setFont("Roboto", "bold");
+      doc.text(formatINRPlain(line.price), w - margin, y, { align: "right" });
+      doc.setFont("Roboto", "normal");
+      y += line.note ? 22 : 16;
+    }
+    y += 4;
+  }
+
+  // Delivery line
+  if (rentalsForLines.deliveryZone !== "none") {
+    doc.setFont("Roboto", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(60, 60, 60);
+    doc.text("Delivery & setup", margin, y);
+    doc.setTextColor(14, 14, 15);
+    doc.setFont("Roboto", "bold");
+    if (rentalsForLines.deliveryZone === "outer") {
+      doc.text("On call", w - margin, y, { align: "right" });
+    } else {
+      doc.text(formatINRPlain(totals.deliveryTotal), w - margin, y, {
+        align: "right",
+      });
+    }
+    y += 20;
+  }
+
+  // Discount line
+  if (meta.discountApplied && totals.discount > 0) {
+    doc.setFont("Roboto", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(56, 142, 89); // success-ish
+    doc.text(
+      `Loyalty discount (${Math.round(EXIT_DISCOUNT_RATE * 100)}%)`,
+      margin,
+      y,
+    );
+    doc.setFont("Roboto", "bold");
+    doc.text(`- ${formatINRPlain(totals.discount)}`, w - margin, y, {
+      align: "right",
+    });
+    y += 20;
+  }
+
+  // Subtotal + GST
+  y += 4;
+  doc.setDrawColor(220, 220, 220);
+  doc.line(margin, y, w - margin, y);
+  y += 18;
+  doc.setFont("Roboto", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(80, 80, 80);
+  doc.text("Subtotal", margin, y);
+  doc.setFont("Roboto", "bold");
+  doc.setTextColor(14, 14, 15);
+  doc.text(formatINRPlain(totals.taxable), w - margin, y, { align: "right" });
+  y += 16;
+  doc.setFont("Roboto", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text(`GST (${Math.round(GST_RATE * 100)}%)`, margin, y);
+  doc.setFont("Roboto", "bold");
+  doc.setTextColor(14, 14, 15);
+  doc.text(formatINRPlain(totals.gst), w - margin, y, { align: "right" });
   y += 24;
 
   // Grand total
@@ -192,13 +320,23 @@ export async function generateQuotePdf(lines: PlateLine[], meta: QuoteMeta) {
   doc.setFont("times", "bold");
   doc.setFontSize(13);
   doc.setTextColor(14, 14, 15);
-  doc.text("Estimated total", margin, y + 4);
+  doc.text("Estimated total (all-in)", margin, y + 4);
   doc.setFont("Roboto", "bold");
   doc.setFontSize(18);
   doc.setTextColor(201, 132, 35);
-  doc.text(formatINRPlain(perPlate * meta.guests), w - margin, y + 6, {
+  doc.text(formatINRPlain(totals.grandTotal), w - margin, y + 6, {
     align: "right",
   });
+  // Effective per-plate sublabel
+  doc.setFont("Roboto", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(110, 110, 110);
+  doc.text(
+    `Effective ${formatINRPlain(Math.round(totals.effectivePerPlate))} / plate`,
+    w - margin,
+    y + 22,
+    { align: "right" },
+  );
 
   y += 60;
   doc.setFont("Roboto", "normal");
@@ -214,6 +352,21 @@ export async function generateQuotePdf(lines: PlateLine[], meta: QuoteMeta) {
     margin,
     y + 12,
   );
+
+  // QR code — scan to open the live plate
+  const qrSize = 96;
+  const qrX = w - margin - qrSize;
+  const qrY = y + 28;
+  doc.addImage(qrPng, "PNG", qrX, qrY, qrSize, qrSize);
+  doc.setFont("Roboto", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(14, 14, 15);
+  doc.text("Scan to open this plate", qrX - 8, qrY + 18, { align: "right" });
+  doc.setFont("Roboto", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(110, 110, 110);
+  doc.text("Customise · share · enquire", qrX - 8, qrY + 32, { align: "right" });
+  doc.text("on your phone — no app needed.", qrX - 8, qrY + 44, { align: "right" });
 
   // Footer
   doc.setDrawColor(232, 163, 61);

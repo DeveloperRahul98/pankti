@@ -310,3 +310,15 @@ select:focus {
     radial-gradient(900px 500px at 70% 20%, rgba(201, 132, 35, 0.18), transparent 60%),
     radial-gradient(700px 400px at 10% 80%, rgba(92, 108, 76, 0.12), transparent 60%);
 }
+
+/* Hide the browser's default number-spinner arrows on type="number" inputs
+   that don't need them (e.g. compact rental cells). */
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

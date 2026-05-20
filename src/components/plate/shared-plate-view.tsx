@@ -3,6 +3,7 @@ import { decodePlate } from "@/lib/plate-encode";
 import { getMenuItem, type MenuItem } from "@/data/menu";
 import { formatINR } from "@/lib/utils";
 import { SharedPlateActions } from "@/components/plate/shared-plate-actions";
+import { SharedPlateQr } from "@/components/plate/shared-plate-qr";
 
 export function SharedPlateView({ token }: { token: string }) {
   const decoded = decodePlate(token);
@@ -83,6 +84,7 @@ export function SharedPlateView({ token }: { token: string }) {
       </div>
 
       <SharedPlateActions token={token} />
+      <SharedPlateQr token={token} />
     </div>
   );
 }

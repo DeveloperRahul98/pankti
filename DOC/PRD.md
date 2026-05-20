@@ -1,6 +1,6 @@
 # Pankti — Product Requirements Document
 
-*Last updated: 2026-05-13*
+*Last updated: 2026-05-20 (Phase 1 feature-complete)*
 
 ---
 
@@ -88,18 +88,84 @@ Shows the customer how complete their plate is — Starter, Rice, Curry, Bread, 
 ### 4.4 Chef's suggestion
 When a customer adds biryani, the app suggests Mirchi Bajji ("balances the heat"). When they add paneer butter masala, it suggests butter naan. Subtle, contextual recommendations.
 
-### 4.5 Spice preference and notes
-A simple control to tell the chef: *Mild · Medium · Hot · Fiery*. Plus a freeform note: *"My grandmother can't have chillies"*, *"Bring a few jain plates separately"*. Both flow into the enquiry automatically.
-
-### 4.6 Save plates
+### 4.5 Save plates
 A customer can save a plate they've built ("Mom's 60th") and come back later. They can compare two saved plates side by side before deciding.
 
-### 4.7 Send enquiry
-A short form: name, phone, event date, occasion, venue, notes. Submitted enquiry is stored locally on the customer's device (for now — backend planned). The customer also gets:
-- A **branded PDF quote** they can download and share
-- A **WhatsApp deep-link** that opens a pre-filled message to the caterer
+### 4.6 Shareable plate links + QR codes
+Any plate can be encoded into a short URL (`/plate/<token>`) and shared. Opening the link shows a read-only summary plus two buttons: *Customise this plate* (loads it into the visitor's own builder) and *Enquire on WhatsApp*. The same link is auto-attached to the WhatsApp message when a customer submits an enquiry, so the caterer receives the exact plate one tap away.
 
-### 4.8 Other touches that build trust
+A **QR code** pointing at the same URL appears on:
+- The share-plate page itself (so a host can show their phone to a guest who scans it)
+- The downloaded PDF quote (so a printed quote can be re-opened by phone camera)
+- The saved WhatsApp PNG image (so a forwarded image is camera-actionable)
+
+### 4.7 Budget mode
+The customer can set a target **per-plate budget**. As they add dishes, the effective per-plate number turns green (under), saffron (within 10% over) or red (clearly over). If they go red, the panel suggests which dish to drop to come back in range — one-tap removal. The budget tracks the **all-in** number once extras / GST / delivery are involved, so it never lies.
+
+### 4.8 Extras & rentals
+Everything beyond food, in one collapsible section:
+- **Drinking water** (₹10 / guest)
+- **Serving style** — mutually exclusive: *Disposable plates* (₹15 / guest) vs *Reusable steel crockery* (₹25 / guest, we bring and wash)
+- **Furniture rental** — tables (₹100), chairs (₹20), table cloths (₹5)
+- **Service staff** — servers / waiters (₹500 each per event, with a "suggested N" link based on 1 per 25 guests)
+
+### 4.9 Delivery & setup
+A standalone collapsible row at the same level as Extras — every event has to answer "where is this going?" Three zones: *Pick up* (free), *Within Hyderabad* (₹500), *Outer Hyderabad* (quote on call). Header shows the current selection as a chip.
+
+### 4.10 Full pricing ledger + GST + effective per plate
+The plate panel shows a small itemised ledger:
+- Food (per-plate × guests)
+- Extras & rentals
+- Delivery & setup
+- Loyalty discount (if applied — see 4.13)
+- GST (5%) — configurable; set `GST_RATE` to 0 for sub-threshold caterers
+- **Estimated total** in saffron
+- **Effective / plate** — the all-in number divided by guests, side-by-side with the total
+
+The same breakdown appears in the PDF quote and the saved image — no surprises off-screen.
+
+### 4.11 Market-reference anchor
+Under the ledger, a small line shows the local market range for the customer's occasion type (e.g. *"Hyderabad weddings typically run ₹500–₹800 per plate"*). If the customer's effective per-plate sits **below** the low end of that range, the line turns green with a **Great value** badge — an anti-objection signal at the moment the customer is comparing the total against their budget.
+
+### 4.12 Dietary summary badge
+Auto-computed strip below the balance bar showing the menu mix at a glance:
+- Veg count + Non-veg count (or a single "All-veg menu" pill when applicable)
+- Jain-safe count (when ≥ 1)
+- Overall heat level (*Mild · Medium · Hot · Fiery · Mixed heat*)
+
+The same one-line summary lands in the WhatsApp message and the PDF quote so the caterer can plan portions and seasoning without a follow-up call.
+
+### 4.13 Exit-intent loyalty discount
+If the customer has built a plate of ≥ 2 dishes and signals they're about to leave (mouse leaves through the top of the viewport on desktop; tab/app switch on mobile), a saffron modal slides in offering **5% off** if they submit their enquiry today. Accepting:
+- Adds a green "Loyalty discount (5%)" line to the ledger, PDF, and image
+- Shows a "✦ 5% loyalty discount locked in" chip on the enquiry success screen
+- The caterer honours it on call-back
+
+Modal fires at most once per browser session.
+
+### 4.14 Wedding bundle (multi-event quotes)
+Indian weddings have 3–5 functions. The host can tag any saved plate with a wedding event type (Engagement / Haldi / Mehendi / Sangeet / Wedding day / Reception / Other) and an event date. Once ≥ 2 plates are tagged, a **Wedding bundle** section appears on the home page with all events in date order, a combined estimate across the whole celebration, and a **single** *"Send full bundle on WhatsApp"* CTA that packages every event (with dates, guest counts and share-plate links) into one message.
+
+### 4.15 Send enquiry
+A short form: name, phone, event date, occasion, venue, notes for the chef (spice level, allergies, special requests). Submitted enquiry is stored locally on the customer's device (for now — backend planned). After submit, the customer gets three deliverables:
+- **Send on WhatsApp** — opens a faithful **preview modal** of the outgoing chat message first (with Copy and Open in WhatsApp), so the customer sees exactly what the caterer will receive before sending
+- **Save as image** — a tall WhatsApp-shaped PNG with the dish list, full ledger and QR; opens the native share sheet on phones
+- **Menu card** — a guest-facing A5 PDF (no prices, no QR) for printing and placing on event tables
+
+### 4.16 Full menu brochure
+A "Download full menu" button on the menu page generates an A4 PDF brochure of the **entire** Pankti catalog — all dishes, organised by course, with prices, descriptions and badges (Jain-safe / Spicy). Useful for sharing the menu on WhatsApp with a relative who doesn't want to open the website, or for printing for the kitchen.
+
+### 4.17 Trust & compliance footer strip
+A card at the bottom of every page surfaces compliance signals tender committees and corporate buyers check first:
+- FSSAI registration number
+- GSTIN
+- ISO 22000 / HACCP certifications
+- Years in business (calculated live from `establishedYear`)
+- Payment options (UPI / NEFT / cheque / GST invoices) and a note that hygiene audits are welcome at the kitchen
+
+FSSAI and GSTIN are also repeated in the very bottom credit row so they're visible no matter how briefly the footer is scrolled.
+
+### 4.18 Other touches that build trust
 - **Live availability** — *"Next 2 weekends booked · Mid-June onwards open"*
 - **Recent enquiry social proof** — small toasts: *"Sneha M. sent a plate for 220 guests · 4 min ago"*
 - **Festival banner** at the top — *"Diwali menu now live"*

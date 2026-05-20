@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
+import { SITE_URL } from "@/lib/site";
 
-const BASE_URL = "https://pankti.local"; // swap to real domain on deploy
 const LAST_MOD = new Date();
 
 const ROUTES: { path: string; priority: number; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"] }[] = [
@@ -15,7 +15,7 @@ const ROUTES: { path: string; priority: number; changeFrequency: MetadataRoute.S
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return ROUTES.map(({ path, priority, changeFrequency }) => ({
-    url: `${BASE_URL}${path}`,
+    url: `${SITE_URL}${path}`,
     lastModified: LAST_MOD,
     priority,
     changeFrequency,

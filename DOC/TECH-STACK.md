@@ -2,7 +2,7 @@
 
 *A plain-English explanation of every technology used in this project and why it's there.*
 
-*Last updated: 2026-05-13*
+*Last updated: 2026-05-20 (Phase 1 feature-complete)*
 
 ---
 
@@ -121,16 +121,41 @@ You don't need to be a developer to read this. If a term is jargon-y, skip to th
 
 ---
 
-## 6. PDF generation
+## 6. Shareable plate links
 
-### jsPDF
-- **What it is**: A JavaScript library that creates PDF files directly in the customer's browser.
-- **Why we picked it**: No server needed. No external service. The customer gets a branded quote instantly.
-- **Where it lives**: `src/lib/pdf-quote.ts`.
+### `plate-encode.ts` + the `/plate/[token]` route
+- **What it does**: Encodes the current plate (list of dish IDs + quantities + guest count) into a compact base64url token. Visiting `/plate/<token>` decodes it server-side and renders a read-only summary with "Customise this plate" and "Enquire on WhatsApp" actions.
+- **Why it's stateless**: The whole plate lives in the URL — no database, no account, no expiry. Anyone with the link can open it.
+- **Where it lives**: `src/lib/plate-encode.ts` (encode/decode), `src/app/plate/[token]/page.tsx` (route), `src/components/plate/shared-plate-view.tsx` (renderer), `src/components/plate/shared-plate-actions.tsx` (action buttons), `src/components/plate/shared-plate-qr.tsx` (the QR code shown on the share page). The WhatsApp deep-link in `enquiry-dialog.tsx` embeds this URL.
+
+### `qr.ts` + the `qrcode` package
+- **What it does**: Generates QR codes (PNG data-URL or SVG string) that point at the share-plate URL. Used in three places: the QR card on the share-plate page, the QR in the corner of the downloaded PDF quote, and the QR baked into the saved WhatsApp PNG image.
+- **Why it matters**: A printed quote or a WhatsApp-forwarded image can be picked up by a phone camera — the recipient lands on the live plate without any typing.
+- **Where it lives**: `src/lib/qr.ts`.
 
 ---
 
-## 7. Project structure
+## 7. PDF & image generation
+
+### jsPDF (used by four generators)
+- **What it is**: A JavaScript library that creates PDF files directly in the customer's browser. No server needed, no external service.
+- **Where it lives — four call sites**:
+  - `src/lib/pdf-quote.ts` — the **branded quote PDF** (per-plate, totals, extras, GST, QR). Generated from the enquiry dialog. _Currently kept as a library function even though the customer-facing "Download PDF" button has been removed — the PDF is still produced internally for the WhatsApp-image generator (which loads its rupee font from the same code path) and can be re-surfaced later._
+  - `src/lib/menu-card.ts` — the **guest-facing A5 menu card** (no prices, no QR, just dish names by course). Generated from the enquiry dialog as "Menu card".
+  - `src/lib/full-menu-pdf.ts` — the **A4 catalog brochure** of the entire Pankti menu. Generated from the "Download full menu" button on the menu page.
+
+### Canvas (used by the WhatsApp image)
+- **What it is**: Native HTML `<canvas>` 2D drawing, no library. Renders a tall PNG of the plate (header, dishes, extras, totals, QR) sized for WhatsApp forwarding.
+- **Where it lives**: `src/lib/plate-image.ts`.
+
+### `whatsapp-preview.tsx`
+- **What it does**: Before any WhatsApp deep-link is opened, the user sees a modal styled like a real WhatsApp chat showing the exact outgoing message bubble, with Copy / Open buttons and a clear "PREVIEW · NOT YET SENT" banner.
+- **Why**: For an MVP where the placeholder phone number can't actually receive messages, this lets you (or a tender judge) verify the *content* of the message. Once the real number is set in `SITE.whatsapp`, the same modal continues to work, just with the Send button going to the live chat.
+- **Where it lives**: `src/components/shared/whatsapp-preview.tsx`.
+
+---
+
+## 8. Project structure
 
 ```
 pankti/
@@ -144,33 +169,46 @@ pankti/
 │   │   ├── page.tsx        Home page (just imports landing components)
 │   │   ├── menu/page.tsx   ← Thin shells. No logic lives here.
 │   │   ├── about/page.tsx
+│   │   ├── compare/page.tsx
+│   │   ├── plate/[token]/page.tsx  Read-only view of a shared plate
 │   │   ├── ...
 │   │   ├── layout.tsx      Global wrapper — fonts, navbar, footer, providers
 │   │   └── globals.css     Design tokens, animations, theme variables
 │   │
 │   ├── components/         All UI lives here, grouped by feature
 │   │   ├── landing/        Hero, occasion picker, signature plates section, etc.
-│   │   ├── menu/           Menu grid, item card, filters, menu page wrapper
-│   │   ├── plate/          Plate panel, balance meter, suggestions, enquiry dialog
+│   │   ├── menu/           Menu grid, item card, filters, menu page wrapper,
+│   │   │                   "Download full menu" button
+│   │   ├── plate/          Plate panel, balance meter, dietary badge, extras,
+│   │   │                   delivery picker, auto-suggest, enquiry dialog,
+│   │   │                   exit-intent dialog, wedding planner, share-plate
+│   │   │                   view / actions / QR, saved-plates section
 │   │   ├── gallery/        Gallery grid, lightbox
 │   │   ├── about/          Founder note
 │   │   ├── contact/        Contact page wrapper
 │   │   ├── signature-plates/  Signature plates page wrapper
 │   │   └── shared/         Navbar, footer, logo, theme toggle, scroll-to-top,
-│   │                       WhatsApp bubble, preloader, social-proof toast, etc.
+│   │                       WhatsApp bubble + preview modal, preloader,
+│   │                       social-proof toast, compliance strip, info-tip, etc.
 │   │
 │   ├── data/               Static content (menu, plates, festivals, team, etc.)
 │   │
 │   └── lib/                Shared helpers — small, reusable, no JSX
-│       ├── site.ts         Business info (phone, email, address)
+│       ├── site.ts         Business info, SITE_URL, COMPLIANCE config
 │       ├── utils.ts        Format helpers (formatINR, sceneImage, etc.)
-│       ├── plate-store.ts  Customer's plate state
-│       ├── saved-plates.ts Saved plates state
-│       ├── lightbox-store.ts  Gallery lightbox state
-│       ├── plate-encode.ts Share-link encoding
-│       └── pdf-quote.ts    PDF generator
+│       ├── plate-store.ts  Plate state, rentals/GST/discount model,
+│       │                   dietary summary, market reference, totals helper
+│       ├── saved-plates.ts Saved plates + wedding-bundle event tagging
+│       ├── lightbox-store.ts   Gallery lightbox state
+│       ├── plate-encode.ts Share-link encoding (base64url of plate + guests)
+│       ├── qr.ts           QR code generation (PNG / SVG)
+│       ├── pdf-quote.ts    Branded quote PDF (per-plate, extras, GST, QR)
+│       ├── plate-image.ts  WhatsApp-shaped PNG of the plate
+│       ├── menu-card.ts    Guest-facing A5 menu card PDF
+│       └── full-menu-pdf.ts  A4 catalog brochure of the full menu
 │
 ├── scripts/                One-time scripts (image fetching)
+├── .env.example            Documents NEXT_PUBLIC_SITE_URL for deploy
 └── DOC/                    Documentation (this folder)
 ```
 
@@ -178,7 +216,7 @@ pankti/
 
 ---
 
-## 8. How the site is built and served
+## 9. How the site is built and served
 
 ### Static prerendering
 Next.js builds every page into an HTML file at build time. When a customer visits, they get instant HTML, then the interactive parts (the plate builder, the lightbox) load on top.
@@ -206,7 +244,7 @@ npm run lint     # Check code style
 
 ---
 
-## 9. Things we deliberately did NOT use
+## 10. Things we deliberately did NOT use
 
 We made choices to keep the project simple. We did **not** add:
 
@@ -221,9 +259,27 @@ We made choices to keep the project simple. We did **not** add:
 
 Each "no" is a deliberate choice to keep the codebase small and fast.
 
+### Configuration on deploy
+
+One environment variable controls the site's canonical URL:
+
+```
+NEXT_PUBLIC_SITE_URL=https://pankti.com   # or whatever your host is
+```
+
+Where it's used:
+- `app/sitemap.ts` — every URL in the sitemap
+- `app/robots.ts` — sitemap reference
+- `app/layout.tsx` — `metadataBase` for OpenGraph / Twitter card / canonical tags
+- `components/plate/wedding-planner.tsx` — SSR fallback when building share links
+
+Customer-facing share links built **in the browser** (the WhatsApp message bodies, the QR-code targets, the share-plate URL) use `window.location.origin` and therefore reflect whatever host the visitor is on — they don't need this variable.
+
+If you don't set it, sitemap and OG tags fall back to `http://localhost:3000` (functional but wrong for SEO). Set it on Vercel under Project Settings → Environment Variables (Production scope), or via your build pipeline on other hosts. See `.env.example` at the project root.
+
 ---
 
-## 10. When to move to Phase 2
+## 11. When to move to Phase 2
 
 We'll add a real backend when **any one** of these becomes true:
 1. The caterer wants to edit dishes/prices without a developer

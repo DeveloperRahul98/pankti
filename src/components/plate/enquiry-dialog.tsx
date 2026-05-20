@@ -2,16 +2,22 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, Download, Check } from "lucide-react";
+import { X, Send, Check, Image as ImageIcon, Printer } from "lucide-react";
 import { toast } from "sonner";
-import { usePlate, getPlateItems, platePricePerPlate } from "@/lib/plate-store";
+import {
+  usePlate,
+  getPlateItems,
+  platePricePerPlate,
+  computeDietarySummary,
+  formatDietarySummary,
+} from "@/lib/plate-store";
 import { encodePlate } from "@/lib/plate-encode";
-import { generateQuotePdf } from "@/lib/pdf-quote";
-// encodePlate kept for WhatsApp deep link below
+import { sharePlateImage } from "@/lib/plate-image";
+import { generateMenuCardPdf } from "@/lib/menu-card";
 import { formatINR } from "@/lib/utils";
-import { SITE } from "@/lib/site";
 import { OCCASIONS } from "@/data/occasions";
 import { DateInput } from "@/components/ui/date-input";
+import { WhatsAppPreview } from "@/components/shared/whatsapp-preview";
 
 export function EnquiryDialog({
   open,
@@ -23,8 +29,8 @@ export function EnquiryDialog({
   const lines = usePlate((s) => s.lines);
   const guests = usePlate((s) => s.guests);
   const occasionId = usePlate((s) => s.occasionId);
-  const spicePref = usePlate((s) => s.spicePref);
-  const plateNotes = usePlate((s) => s.notes);
+  const rentals = usePlate((s) => s.rentals);
+  const discountApplied = usePlate((s) => s.discountApplied);
   const items = getPlateItems(lines);
   const perPlate = platePricePerPlate(lines);
   const total = perPlate * guests;
@@ -38,16 +44,7 @@ export function EnquiryDialog({
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [sent, setSent] = useState(false);
-
-  // Pre-fill enquiry notes from plate notes when dialog opens
-  useEffect(() => {
-    if (!open) return;
-    const SPICE_NAMES = ["Mild", "Medium", "Hot", "Fiery"];
-    const prefix = `Spice preference: ${SPICE_NAMES[spicePref]}.`;
-    const merged = plateNotes ? `${prefix}\n${plateNotes}` : prefix;
-    setNotes((current) => (current ? current : merged));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  const [whatsAppPreviewOpen, setWhatsAppPreviewOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -68,6 +65,8 @@ export function EnquiryDialog({
     eventDate,
     occasion,
     guests,
+    rentals,
+    discountApplied,
   };
 
   const onSend = (e: React.FormEvent) => {
@@ -106,28 +105,64 @@ export function EnquiryDialog({
     toast.success("Enquiry sent! We'll be in touch within the hour.");
   };
 
-  const onDownload = async () => {
+  const onSaveImage = async () => {
     if (lines.length === 0) return;
     try {
-      await generateQuotePdf(lines, meta);
-      toast.success("Quote PDF downloaded");
+      const result = await sharePlateImage(lines, meta);
+      if (result === "shared") {
+        toast.success("Plate image shared");
+      } else {
+        toast.success("Plate image saved", {
+          description: "Forward it on WhatsApp — image attaches in seconds.",
+        });
+      }
     } catch {
-      toast.error("Could not generate PDF — please try again");
+      toast.error("Could not generate image — please try again");
     }
   };
 
-  const onWhatsApp = () => {
+  const onMenuCard = async () => {
+    if (lines.length === 0) return;
+    try {
+      await generateMenuCardPdf(lines, {
+        title: occasion ? `${occasion} menu` : undefined,
+        eventDate: eventDate || undefined,
+        hostName: name ? `${name}'s event` : undefined,
+      });
+      toast.success("Menu card downloaded", {
+        description: "Print on A5 and place on guest tables.",
+      });
+    } catch {
+      toast.error("Could not generate the menu card — please try again");
+    }
+  };
+
+  const buildWhatsAppText = () => {
     const token = encodePlate(lines, guests);
     const url = `${window.location.origin}/plate/${token}`;
-    const text = encodeURIComponent(
-      `Hi Pankti, I'd like to enquire for ${occasion || "an event"} on ${eventDate || "[date]"} for ${guests} guests.\n\nPlate: ${url}\n\nEstimated: ${formatINR(total)}\n\n— ${name || "[name]"}`,
-    );
-    window.open(`https://wa.me/${SITE.whatsapp}?text=${text}`, "_blank");
+    const discountLine = discountApplied
+      ? `\n*5% loyalty discount* applied at submission.\n`
+      : "";
+    const dietary = formatDietarySummary(computeDietarySummary(lines));
+    const dietaryLine = dietary ? `\n_Menu mix: ${dietary}_\n` : "";
+    return `Hi Pankti, I'd like to enquire for *${occasion || "an event"}* on ${eventDate || "[date]"} for *${guests} guests*.\n\nPlate: ${url}\n${dietaryLine}${discountLine}\n*Estimated:* ${formatINR(total)}\n\n— ${name || "[name]"}`;
+  };
+
+  const onWhatsApp = () => {
+    setWhatsAppPreviewOpen(true);
   };
 
   if (!mounted) return null;
 
-  return createPortal(
+  return (
+    <>
+      <WhatsAppPreview
+        open={whatsAppPreviewOpen}
+        onClose={() => setWhatsAppPreviewOpen(false)}
+        message={buildWhatsAppText()}
+        title="Pankti Catering"
+      />
+      {createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -248,13 +283,13 @@ export function EnquiryDialog({
                 </div>
                 <div>
                   <label className="text-xs font-medium text-fg-muted">
-                    Notes (allergies, preferences, timing)
+                    Notes for the chef
                   </label>
                   <textarea
-                    rows={2}
+                    rows={3}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Anything we should know?"
+                    placeholder="Spice level (Mild / Medium / Hot / Fiery), allergies, special requests, timing — anything we should know."
                     className="mt-1 !py-2 !text-sm resize-none"
                   />
                 </div>
@@ -269,11 +304,20 @@ export function EnquiryDialog({
                   </button>
                   <button
                     type="button"
-                    onClick={onDownload}
+                    onClick={onSaveImage}
                     className="btn-ghost inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold"
                   >
-                    <Download className="h-4 w-4" />
-                    Download PDF
+                    <ImageIcon className="h-4 w-4" />
+                    Save as image
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onMenuCard}
+                    className="btn-ghost inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold"
+                    title="Print-ready menu card for your guest tables (no prices)"
+                  >
+                    <Printer className="h-4 w-4" />
+                    Menu card
                   </button>
                 </div>
               </form>
@@ -287,6 +331,11 @@ export function EnquiryDialog({
                   We&apos;ve saved your plate. To get the fastest response, also
                   send it to us on WhatsApp — one tap.
                 </p>
+                {discountApplied && (
+                  <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] text-primary px-3 py-1 text-xs font-semibold">
+                    ✦ 5% loyalty discount locked in for this enquiry
+                  </div>
+                )}
                 <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
                   <button
                     type="button"
@@ -297,11 +346,20 @@ export function EnquiryDialog({
                   </button>
                   <button
                     type="button"
-                    onClick={onDownload}
+                    onClick={onSaveImage}
                     className="btn-ghost inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold"
                   >
-                    <Download className="h-4 w-4" />
-                    Download PDF
+                    <ImageIcon className="h-4 w-4" />
+                    Save as image
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onMenuCard}
+                    className="btn-ghost inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold"
+                    title="Print-ready menu card for your guest tables (no prices)"
+                  >
+                    <Printer className="h-4 w-4" />
+                    Menu card
                   </button>
                 </div>
                 <button
@@ -321,5 +379,7 @@ export function EnquiryDialog({
       )}
     </AnimatePresence>,
     document.body,
+  )}
+    </>
   );
 }
